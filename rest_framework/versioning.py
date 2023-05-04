@@ -25,10 +25,14 @@ class BaseVersioning:
         return _reverse(viewname, args, kwargs, request, format, **extra)
 
     def is_allowed_version(self, version):
-        if not self.allowed_versions:
-            return True
-        return ((version is not None and version == self.default_version) or
-                (version in self.allowed_versions))
+        return (
+            (
+                (version is not None and version == self.default_version)
+                or (version in self.allowed_versions)
+            )
+            if self.allowed_versions
+            else True
+        )
 
 
 class AcceptHeaderVersioning(BaseVersioning):
@@ -135,7 +139,7 @@ class NamespaceVersioning(BaseVersioning):
         )
 
     def get_versioned_viewname(self, viewname, request):
-        return request.version + ':' + viewname
+        return f'{request.version}:{viewname}'
 
 
 class HostNameVersioning(BaseVersioning):

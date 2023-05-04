@@ -74,7 +74,7 @@ class PKOnlyObject:
         self.pk = pk
 
     def __str__(self):
-        return "%s" % self.pk
+        return f"{self.pk}"
 
 
 # We assume that 'validators' are intended for the child serializer,
@@ -350,7 +350,7 @@ class HyperlinkedRelatedField(RelatedField):
             data = parse.urlparse(data).path
             prefix = get_script_prefix()
             if data.startswith(prefix):
-                data = '/' + data[len(prefix):]
+                data = f'/{data[len(prefix):]}'
 
         data = uri_to_iri(parse.unquote(data))
 
@@ -415,10 +415,7 @@ class HyperlinkedRelatedField(RelatedField):
                 )
             raise ImproperlyConfigured(msg % self.view_name)
 
-        if url is None:
-            return None
-
-        return Hyperlink(url, value)
+        return None if url is None else Hyperlink(url, value)
 
 
 class HyperlinkedIdentityField(HyperlinkedRelatedField):
@@ -512,9 +509,10 @@ class ManyRelatedField(Field):
         # lists in HTML forms.
         if html.is_html_input(dictionary):
             # Don't return [] if the update is partial
-            if self.field_name not in dictionary:
-                if getattr(self.root, 'partial', False):
-                    return empty
+            if self.field_name not in dictionary and getattr(
+                self.root, 'partial', False
+            ):
+                return empty
             return dictionary.getlist(self.field_name)
 
         return dictionary.get(self.field_name, empty)

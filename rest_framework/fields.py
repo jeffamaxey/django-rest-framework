@@ -104,7 +104,9 @@ def get_attribute(instance, attrs):
                 # If we raised an Attribute or KeyError here it'd get treated
                 # as an omitted field in `Field.get_attribute()`. Instead we
                 # raise a ValueError to ensure the exception is not masked.
-                raise ValueError('Exception raised in callable attribute "{}"; original exception was: {}'.format(attr, exc))
+                raise ValueError(
+                    f'Exception raised in callable attribute "{attr}"; original exception was: {exc}'
+                )
 
     return instance
 
@@ -280,7 +282,7 @@ class CreateOnlyDefault:
         return self.default
 
     def __repr__(self):
-        return '%s(%s)' % (self.__class__.__name__, repr(self.default))
+        return f'{self.__class__.__name__}({repr(self.default)})'
 
 
 class CurrentUserDefault:
@@ -290,7 +292,7 @@ class CurrentUserDefault:
         return serializer_field.context['request'].user
 
     def __repr__(self):
-        return '%s()' % self.__class__.__name__
+        return f'{self.__class__.__name__}()'
 
 
 class SkipField(Exception):
@@ -348,9 +350,8 @@ class Field:
         self.style = {} if style is None else style
         self.allow_null = allow_null
 
-        if self.default_empty_html is not empty:
-            if default is not empty:
-                self.default_empty_html = default
+        if self.default_empty_html is not empty and default is not empty:
+            self.default_empty_html = default
 
         if validators is not None:
             self.validators = list(validators)
@@ -362,7 +363,7 @@ class Field:
         # Collect default error message from self and parent classes
         messages = {}
         for cls in reversed(self.__class__.__mro__):
-            messages.update(getattr(cls, 'default_error_messages', {}))
+            messages |= getattr(cls, 'default_error_messages', {})
         messages.update(error_messages or {})
         self.error_messages = messages
 
@@ -395,10 +396,7 @@ class Field:
 
         # self.source_attrs is a list of attributes that need to be looked up
         # when serializing the instance, or populating the validated data.
-        if self.source == '*':
-            self.source_attrs = []
-        else:
-            self.source_attrs = self.source.split('.')
+        self.source_attrs = [] if self.source == '*' else self.source.split('.')
 
     # .validators is a lazily loaded property, that gets its default
     # value from `get_validators`.
@@ -420,33 +418,32 @@ class Field:
         Return a value to use when the field is being returned as a primitive
         value, without any object instance.
         """
-        if callable(self.initial):
-            return self.initial()
-        return self.initial
+        return self.initial() if callable(self.initial) else self.initial
 
     def get_value(self, dictionary):
         """
         Given the *incoming* primitive data, return the value for this field
         that should be validated and transformed to a native value.
         """
-        if html.is_html_input(dictionary):
-            # HTML forms will represent empty fields as '', and cannot
-            # represent None or False values directly.
-            if self.field_name not in dictionary:
-                if getattr(self.root, 'partial', False):
-                    return empty
-                return self.default_empty_html
-            ret = dictionary[self.field_name]
-            if ret == '' and self.allow_null:
+        if not html.is_html_input(dictionary):
+            return dictionary.get(self.field_name, empty)
+        # HTML forms will represent empty fields as '', and cannot
+        # represent None or False values directly.
+        if self.field_name not in dictionary:
+            if getattr(self.root, 'partial', False):
+                return empty
+            return self.default_empty_html
+        ret = dictionary[self.field_name]
+        if ret == '':
+            if self.allow_null:
                 # If the field is blank, and null is a valid value then
                 # determine if we should use null instead.
                 return '' if getattr(self, 'allow_blank', False) else None
-            elif ret == '' and not self.required:
+            elif not self.required:
                 # If the field is blank, and emptiness is valid then
                 # determine if we should use emptiness instead.
                 return '' if getattr(self, 'allow_blank', False) else empty
-            return ret
-        return dictionary.get(self.field_name, empty)
+        return ret
 
     def get_attribute(self, instance):
         """
@@ -676,7 +673,7 @@ class Field:
         # See https://github.com/encode/django-rest-framework/issues/1954
         # and https://github.com/encode/django-rest-framework/pull/4489
         args = [
-            copy.deepcopy(item) if not isinstance(item, REGEX_TYPE) else item
+            item if isinstance(item, REGEX_TYPE) else copy.deepcopy(item)
             for item in self._args
         ]
         kwargs = {
@@ -737,9 +734,7 @@ class BooleanField(Field):
             return True
         elif value in self.FALSE_VALUES:
             return False
-        if value in self.NULL_VALUES and self.allow_null:
-            return None
-        return bool(value)
+        return None if value in self.NULL_VALUES and self.allow_null else bool(value)
 
 
 class NullBooleanField(BooleanField):
@@ -792,7 +787,7 @@ class CharField(Field):
         # Test for the empty string here so that it does not get validated,
         # and so that subclasses do not need to handle it explicitly
         # inside the `to_internal_value()` method.
-        if data == '' or (self.trim_whitespace and str(data).strip() == ''):
+        if data == '' or self.trim_whitespace and not str(data).strip():
             if not self.allow_blank:
                 self.fail('blank')
             return ''
@@ -871,8 +866,7 @@ class UUIDField(Field):
         self.uuid_format = kwargs.pop('format', 'hex_verbose')
         if self.uuid_format not in self.valid_formats:
             raise ValueError(
-                'Invalid format for uuid representation. '
-                'Must be one of "{}"'.format('", "'.join(self.valid_formats))
+                f"""Invalid format for uuid representation. Must be one of "{'", "'.join(self.valid_formats)}\""""
             )
         super().__init__(**kwargs)
 
@@ -1042,8 +1036,9 @@ class DecimalField(Field):
 
         if rounding is not None:
             valid_roundings = [v for k, v in vars(decimal).items() if k.startswith('ROUND_')]
-            assert rounding in valid_roundings, (
-                'Invalid rounding option %s. Valid values for rounding are: %s' % (rounding, valid_roundings))
+            assert (
+                rounding in valid_roundings
+            ), f'Invalid rounding option {rounding}. Valid values for rounding are: {valid_roundings}'
         self.rounding = rounding
 
     def validate_empty_values(self, data):
@@ -1118,11 +1113,7 @@ class DecimalField(Field):
         coerce_to_string = getattr(self, 'coerce_to_string', api_settings.COERCE_DECIMAL_TO_STRING)
 
         if value is None:
-            if coerce_to_string:
-                return ''
-            else:
-                return None
-
+            return '' if coerce_to_string else None
         if not isinstance(value, decimal.Decimal):
             value = decimal.Decimal(str(value).strip())
 
@@ -1130,10 +1121,7 @@ class DecimalField(Field):
 
         if not coerce_to_string:
             return quantized
-        if self.localize:
-            return localize_input(quantized)
-
-        return '{:f}'.format(quantized)
+        return localize_input(quantized) if self.localize else '{:f}'.format(quantized)
 
     def quantize(self, value):
         """
@@ -1206,20 +1194,16 @@ class DateTimeField(Field):
             return self.enforce_timezone(value)
 
         for input_format in input_formats:
-            if input_format.lower() == ISO_8601:
-                try:
+            try:
+                if input_format.lower() == ISO_8601:
                     parsed = parse_datetime(value)
                     if parsed is not None:
                         return self.enforce_timezone(parsed)
-                except (ValueError, TypeError):
-                    pass
-            else:
-                try:
+                else:
                     parsed = self.datetime_parser(value, input_format)
                     return self.enforce_timezone(parsed)
-                except (ValueError, TypeError):
-                    pass
-
+            except (ValueError, TypeError):
+                pass
         humanized_format = humanize_datetime.datetime_formats(input_formats)
         self.fail('invalid', format=humanized_format)
 
@@ -1237,7 +1221,7 @@ class DateTimeField(Field):
         if output_format.lower() == ISO_8601:
             value = value.isoformat()
             if value.endswith('+00:00'):
-                value = value[:-6] + 'Z'
+                value = f'{value[:-6]}Z'
             return value
         return value.strftime(output_format)
 
@@ -1475,9 +1459,10 @@ class MultipleChoiceField(ChoiceField):
         super().__init__(**kwargs)
 
     def get_value(self, dictionary):
-        if self.field_name not in dictionary:
-            if getattr(self.root, 'partial', False):
-                return empty
+        if self.field_name not in dictionary and getattr(
+            self.root, 'partial', False
+        ):
+            return empty
         # We override the default field access in order to support
         # lists in HTML forms.
         if html.is_html_input(dictionary):
@@ -1559,17 +1544,15 @@ class FileField(Field):
         if not value:
             return None
 
-        use_url = getattr(self, 'use_url', api_settings.UPLOADED_FILES_USE_URL)
-        if use_url:
+        if use_url := getattr(
+            self, 'use_url', api_settings.UPLOADED_FILES_USE_URL
+        ):
             try:
                 url = value.url
             except AttributeError:
                 return None
             request = self.context.get('request', None)
-            if request is not None:
-                return request.build_absolute_uri(url)
-            return url
-
+            return request.build_absolute_uri(url) if request is not None else url
         return value.name
 
 
@@ -1641,9 +1624,10 @@ class ListField(Field):
             self.validators.append(MinLengthValidator(self.min_length, message=message))
 
     def get_value(self, dictionary):
-        if self.field_name not in dictionary:
-            if getattr(self.root, 'partial', False):
-                return empty
+        if self.field_name not in dictionary and getattr(
+            self.root, 'partial', False
+        ):
+            return empty
         # We override the default field access in order to support
         # lists in HTML forms.
         if html.is_html_input(dictionary):

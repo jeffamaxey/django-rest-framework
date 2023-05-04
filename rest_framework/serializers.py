@@ -156,10 +156,11 @@ class BaseSerializer(Field):
             list_kwargs['max_length'] = max_length
         if min_length is not None:
             list_kwargs['min_length'] = min_length
-        list_kwargs.update({
-            key: value for key, value in kwargs.items()
+        list_kwargs |= {
+            key: value
+            for key, value in kwargs.items()
             if key in LIST_SERIALIZER_KWARGS
-        })
+        }
         meta = getattr(cls, 'Meta', None)
         list_serializer_class = getattr(meta, 'list_serializer_class', ListSerializer)
         return list_serializer_class(*args, **list_kwargs)
@@ -390,16 +391,18 @@ class Serializer(BaseSerializer, metaclass=SerializerMetaclass):
     def get_initial(self):
         if hasattr(self, 'initial_data'):
             # initial_data may not be a valid type
-            if not isinstance(self.initial_data, Mapping):
-                return OrderedDict()
-
-            return OrderedDict([
-                (field_name, field.get_value(self.initial_data))
-                for field_name, field in self.fields.items()
-                if (field.get_value(self.initial_data) is not empty) and
-                not field.read_only
-            ])
-
+            return (
+                OrderedDict(
+                    [
+                        (field_name, field.get_value(self.initial_data))
+                        for field_name, field in self.fields.items()
+                        if (field.get_value(self.initial_data) is not empty)
+                        and not field.read_only
+                    ]
+                )
+                if isinstance(self.initial_data, Mapping)
+                else OrderedDict()
+            )
         return OrderedDict([
             (field.field_name, field.get_initial())
             for field in self.fields.values()
@@ -477,7 +480,7 @@ class Serializer(BaseSerializer, metaclass=SerializerMetaclass):
         fields = self._writable_fields
 
         for field in fields:
-            validate_method = getattr(self, 'validate_' + field.field_name, None)
+            validate_method = getattr(self, f'validate_{field.field_name}', None)
             primitive_value = field.get_value(data)
             try:
                 validated_value = field.run_validation(primitive_value)
@@ -953,11 +956,11 @@ class ModelSerializer(Serializer):
         # They are not valid arguments to the default `.create()` method,
         # as they require that the instance has already been saved.
         info = model_meta.get_field_info(ModelClass)
-        many_to_many = {}
-        for field_name, relation_info in info.relations.items():
-            if relation_info.to_many and (field_name in validated_data):
-                many_to_many[field_name] = validated_data.pop(field_name)
-
+        many_to_many = {
+            field_name: validated_data.pop(field_name)
+            for field_name, relation_info in info.relations.items()
+            if relation_info.to_many and (field_name in validated_data)
+        }
         try:
             instance = ModelClass._default_manager.create(**validated_data)
         except TypeError:
@@ -1110,8 +1113,7 @@ class ModelSerializer(Serializer):
 
         if exclude and not isinstance(exclude, (list, tuple)):
             raise TypeError(
-                'The `exclude` option must be a list or tuple. Got %s.' %
-                type(exclude).__name__
+                f'The `exclude` option must be a list or tuple. Got {type(exclude).__name__}.'
             )
 
         assert not (fields and exclude), (
@@ -1121,7 +1123,7 @@ class ModelSerializer(Serializer):
             )
         )
 
-        assert not (fields is None and exclude is None), (
+        assert fields is not None or exclude is not None, (
             "Creating a ModelSerializer without either the 'fields' attribute "
             "or the 'exclude' attribute has been deprecated since 3.3.0, "
             "and is now disallowed. Add an explicit fields = '__all__' to the "
@@ -1208,11 +1210,11 @@ class ModelSerializer(Serializer):
 
         elif field_name in info.relations:
             relation_info = info.relations[field_name]
-            if not nested_depth:
-                return self.build_relational_field(field_name, relation_info)
-            else:
-                return self.build_nested_field(field_name, relation_info, nested_depth)
-
+            return (
+                self.build_nested_field(field_name, relation_info, nested_depth)
+                if nested_depth
+                else self.build_relational_field(field_name, relation_info)
+            )
         elif hasattr(model_class, field_name):
             return self.build_property_field(field_name, model_class)
 
@@ -1268,8 +1270,8 @@ class ModelSerializer(Serializer):
             # Populate the `encoder` argument of `JSONField` instances generated
             # for the model `JSONField`.
             field_kwargs['encoder'] = getattr(model_field, 'encoder', None)
-            if is_django_jsonfield:
-                field_kwargs['decoder'] = getattr(model_field, 'decoder', None)
+        if is_django_jsonfield:
+            field_kwargs['decoder'] = getattr(model_field, 'decoder', None)
 
         if postgres_fields and isinstance(model_field, postgres_fields.ArrayField):
             # Populate the `child` argument on `ListField` instances generated
@@ -1338,8 +1340,7 @@ class ModelSerializer(Serializer):
         Raise an error on any unknown fields.
         """
         raise ImproperlyConfigured(
-            'Field name `%s` is not valid for model `%s`.' %
-            (field_name, model_class.__name__)
+            f'Field name `{field_name}` is not valid for model `{model_class.__name__}`.'
         )
 
     def include_extra_kwargs(self, kwargs, extra_kwargs):

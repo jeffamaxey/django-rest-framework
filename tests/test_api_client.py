@@ -96,12 +96,14 @@ def _get_data(request):
 
 
 def _get_files(request):
-    if not request.FILES:
-        return {}
-    return {
-        key: {'name': value.name, 'content': value.read()}
-        for key, value in request.FILES.items()
-    }
+    return (
+        {
+            key: {'name': value.name, 'content': value.read()}
+            for key, value in request.FILES.items()
+        }
+        if request.FILES
+        else {}
+    )
 
 
 class SchemaView(APIView):

@@ -23,15 +23,16 @@ def get_breadcrumbs(url, request=None):
             # and if so add it to the breadcrumbs
             cls = getattr(view, 'cls', None)
             initkwargs = getattr(view, 'initkwargs', {})
-            if cls is not None and issubclass(cls, APIView):
-                # Don't list the same view twice in a row.
-                # Probably an optional trailing slash.
-                if not seen or seen[-1] != view:
-                    c = cls(**initkwargs)
-                    name = c.get_view_name()
-                    insert_url = preserve_builtin_query_params(prefix + url, request)
-                    breadcrumbs_list.insert(0, (name, insert_url))
-                    seen.append(view)
+            if (
+                cls is not None
+                and issubclass(cls, APIView)
+                and (not seen or seen[-1] != view)
+            ):
+                c = cls(**initkwargs)
+                name = c.get_view_name()
+                insert_url = preserve_builtin_query_params(prefix + url, request)
+                breadcrumbs_list.insert(0, (name, insert_url))
+                seen.append(view)
 
         if url == '':
             # All done

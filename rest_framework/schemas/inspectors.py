@@ -79,8 +79,7 @@ class ViewInspector:
         view = self.view
 
         method_name = getattr(view, 'action', method.lower())
-        method_docstring = getattr(view, method_name, None).__doc__
-        if method_docstring:
+        if method_docstring := getattr(view, method_name, None).__doc__:
             # An explicit docstring on the method or action.
             return self._get_description_section(view, method.lower(), formatting.dedent(smart_str(method_docstring)))
         else:
@@ -88,7 +87,7 @@ class ViewInspector:
                                                  view.get_view_description())
 
     def _get_description_section(self, view, header, description):
-        lines = [line for line in description.splitlines()]
+        lines = list(description.splitlines())
         current_section = ''
         sections = {'': ''}
 
@@ -99,14 +98,16 @@ class ViewInspector:
             else:
                 sections[current_section] += '\n' + line
 
-        # TODO: SCHEMA_COERCE_METHOD_NAMES appears here and in `SchemaGenerator.get_keys`
-        coerce_method_names = api_settings.SCHEMA_COERCE_METHOD_NAMES
         if header in sections:
             return sections[header].strip()
-        if header in coerce_method_names:
-            if coerce_method_names[header] in sections:
-                return sections[coerce_method_names[header]].strip()
-        return sections[''].strip()
+        # TODO: SCHEMA_COERCE_METHOD_NAMES appears here and in `SchemaGenerator.get_keys`
+        coerce_method_names = api_settings.SCHEMA_COERCE_METHOD_NAMES
+        return (
+            sections[coerce_method_names[header]].strip()
+            if header in coerce_method_names
+            and coerce_method_names[header] in sections
+            else sections[''].strip()
+        )
 
 
 class DefaultSchema(ViewInspector):

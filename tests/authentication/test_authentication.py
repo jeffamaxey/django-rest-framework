@@ -93,11 +93,11 @@ class BasicAuthTests(TestCase):
 
     def test_post_form_passing_basic_auth(self):
         """Ensure POSTing json over basic auth with correct credentials passes and does not require CSRF"""
-        credentials = ('%s:%s' % (self.username, self.password))
+        credentials = f'{self.username}:{self.password}'
         base64_credentials = base64.b64encode(
             credentials.encode(HTTP_HEADER_ENCODING)
         ).decode(HTTP_HEADER_ENCODING)
-        auth = 'Basic %s' % base64_credentials
+        auth = f'Basic {base64_credentials}'
         response = self.csrf_client.post(
             '/basic/',
             {'example': 'example'},
@@ -107,11 +107,11 @@ class BasicAuthTests(TestCase):
 
     def test_post_json_passing_basic_auth(self):
         """Ensure POSTing form over basic auth with correct credentials passes and does not require CSRF"""
-        credentials = ('%s:%s' % (self.username, self.password))
+        credentials = f'{self.username}:{self.password}'
         base64_credentials = base64.b64encode(
             credentials.encode(HTTP_HEADER_ENCODING)
         ).decode(HTTP_HEADER_ENCODING)
-        auth = 'Basic %s' % base64_credentials
+        auth = f'Basic {base64_credentials}'
         response = self.csrf_client.post(
             '/basic/',
             {'example': 'example'},
@@ -167,11 +167,11 @@ class BasicAuthTests(TestCase):
         User.objects.create_user(
             username, email, password
         )
-        credentials = ('%s:%s' % (username, password))
+        credentials = f'{username}:{password}'
         base64_credentials = base64.b64encode(
             credentials.encode('utf-8')
         ).decode(HTTP_HEADER_ENCODING)
-        auth = 'Basic %s' % base64_credentials
+        auth = f'Basic {base64_credentials}'
         response = self.csrf_client.post(
             '/basic/',
             {'example': 'example'},
@@ -312,14 +312,15 @@ class BaseTokenAuthTests:
         user.save()
         self.model.objects.create(key='foobar_token', user=user)
         response = self.csrf_client.post(
-            self.path, {'example': 'example'},
-            HTTP_AUTHORIZATION=self.header_prefix + 'foobar_token'
+            self.path,
+            {'example': 'example'},
+            HTTP_AUTHORIZATION=f'{self.header_prefix}foobar_token',
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_fail_post_form_passing_nonexistent_token_auth(self):
         # use a nonexistent token key
-        auth = self.header_prefix + 'wxyz6789'
+        auth = f'{self.header_prefix}wxyz6789'
         response = self.csrf_client.post(
             self.path, {'example': 'example'}, HTTP_AUTHORIZATION=auth
         )
@@ -333,8 +334,9 @@ class BaseTokenAuthTests:
 
     def test_fail_post_if_token_contains_spaces(self):
         response = self.csrf_client.post(
-            self.path, {'example': 'example'},
-            HTTP_AUTHORIZATION=self.header_prefix + 'foo bar'
+            self.path,
+            {'example': 'example'},
+            HTTP_AUTHORIZATION=f'{self.header_prefix}foo bar',
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
